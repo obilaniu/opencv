@@ -50,6 +50,7 @@
   @{
     @defgroup videoio_c C API
     @defgroup videoio_ios iOS glue
+    @defgroup videoio_winrt WinRT glue
   @}
 */
 
@@ -85,9 +86,11 @@ enum { CAP_ANY          = 0,     // autodetect
        CAP_AVFOUNDATION = 1200,  // AVFoundation framework for iOS (OS X Lion will have the same API)
        CAP_GIGANETIX    = 1300,  // Smartek Giganetix GigEVisionSDK
        CAP_MSMF         = 1400,  // Microsoft Media Foundation (via videoInput)
-       CAP_INTELPERC    = 1500,   // Intel Perceptual Computing SDK
-       CAP_OPENNI2      = 1600,   // OpenNI2 (for Kinect)
-       CAP_OPENNI2_ASUS = 1610   // OpenNI2 (for Asus Xtion and Occipital Structure sensors)
+       CAP_WINRT        = 1410,  // Microsoft Windows Runtime using Media Foundation
+       CAP_INTELPERC    = 1500,  // Intel Perceptual Computing SDK
+       CAP_OPENNI2      = 1600,  // OpenNI2 (for Kinect)
+       CAP_OPENNI2_ASUS = 1610,  // OpenNI2 (for Asus Xtion and Occipital Structure sensors)
+       CAP_GPHOTO2      = 1700   // gPhoto2 connection
      };
 
 // generic properties (based on DC1394 properties)
@@ -376,6 +379,26 @@ enum { CAP_INTELPERC_DEPTH_MAP              = 0, // Each pixel is a 16-bit integ
        CAP_INTELPERC_IMAGE                  = 3
      };
 
+enum { VIDEOWRITER_PROP_QUALITY = 1,    // Quality (0..100%) of the videostream encoded
+       VIDEOWRITER_PROP_FRAMEBYTES = 2, // (Read-only): Size of just encoded video frame
+     };
+
+// gPhoto2 properties, if propertyId is less than 0 then work on widget with that __additive inversed__ camera setting ID
+// Get IDs by using CAP_PROP_GPHOTO2_WIDGET_ENUMERATE.
+// @see CvCaptureCAM_GPHOTO2 for more info
+enum { CAP_PROP_GPHOTO2_PREVIEW           = 17001, // Capture only preview from liveview mode.
+       CAP_PROP_GPHOTO2_WIDGET_ENUMERATE  = 17002, // Readonly, returns (const char *).
+       CAP_PROP_GPHOTO2_RELOAD_CONFIG     = 17003, // Trigger, only by set. Reload camera settings.
+       CAP_PROP_GPHOTO2_RELOAD_ON_CHANGE  = 17004, // Reload all settings on set.
+       CAP_PROP_GPHOTO2_COLLECT_MSGS      = 17005, // Collect messages with details.
+       CAP_PROP_GPHOTO2_FLUSH_MSGS        = 17006, // Readonly, returns (const char *).
+       CAP_PROP_SPEED                     = 17007, // Exposure speed. Can be readonly, depends on camera program.
+       CAP_PROP_APERTURE                  = 17008, // Aperture. Can be readonly, depends on camera program.
+       CAP_PROP_EXPOSUREPROGRAM           = 17009, // Camera exposure program.
+       CAP_PROP_VIEWFINDER                = 17010  // Enter liveview mode.
+     };
+
+//enum {
 
 class IVideoCapture;
 
@@ -525,27 +548,27 @@ public:
     /** @brief Sets a property in the VideoCapture.
 
     @param propId Property identifier. It can be one of the following:
-     -   **CV_CAP_PROP_POS_MSEC** Current position of the video file in milliseconds.
-     -   **CV_CAP_PROP_POS_FRAMES** 0-based index of the frame to be decoded/captured next.
-     -   **CV_CAP_PROP_POS_AVI_RATIO** Relative position of the video file: 0 - start of the
+     -   **CAP_PROP_POS_MSEC** Current position of the video file in milliseconds.
+     -   **CAP_PROP_POS_FRAMES** 0-based index of the frame to be decoded/captured next.
+     -   **CAP_PROP_POS_AVI_RATIO** Relative position of the video file: 0 - start of the
          film, 1 - end of the film.
-     -   **CV_CAP_PROP_FRAME_WIDTH** Width of the frames in the video stream.
-     -   **CV_CAP_PROP_FRAME_HEIGHT** Height of the frames in the video stream.
-     -   **CV_CAP_PROP_FPS** Frame rate.
-     -   **CV_CAP_PROP_FOURCC** 4-character code of codec.
-     -   **CV_CAP_PROP_FRAME_COUNT** Number of frames in the video file.
-     -   **CV_CAP_PROP_FORMAT** Format of the Mat objects returned by retrieve() .
-     -   **CV_CAP_PROP_MODE** Backend-specific value indicating the current capture mode.
-     -   **CV_CAP_PROP_BRIGHTNESS** Brightness of the image (only for cameras).
-     -   **CV_CAP_PROP_CONTRAST** Contrast of the image (only for cameras).
-     -   **CV_CAP_PROP_SATURATION** Saturation of the image (only for cameras).
-     -   **CV_CAP_PROP_HUE** Hue of the image (only for cameras).
-     -   **CV_CAP_PROP_GAIN** Gain of the image (only for cameras).
-     -   **CV_CAP_PROP_EXPOSURE** Exposure (only for cameras).
-     -   **CV_CAP_PROP_CONVERT_RGB** Boolean flags indicating whether images should be converted
+     -   **CAP_PROP_FRAME_WIDTH** Width of the frames in the video stream.
+     -   **CAP_PROP_FRAME_HEIGHT** Height of the frames in the video stream.
+     -   **CAP_PROP_FPS** Frame rate.
+     -   **CAP_PROP_FOURCC** 4-character code of codec.
+     -   **CAP_PROP_FRAME_COUNT** Number of frames in the video file.
+     -   **CAP_PROP_FORMAT** Format of the Mat objects returned by retrieve() .
+     -   **CAP_PROP_MODE** Backend-specific value indicating the current capture mode.
+     -   **CAP_PROP_BRIGHTNESS** Brightness of the image (only for cameras).
+     -   **CAP_PROP_CONTRAST** Contrast of the image (only for cameras).
+     -   **CAP_PROP_SATURATION** Saturation of the image (only for cameras).
+     -   **CAP_PROP_HUE** Hue of the image (only for cameras).
+     -   **CAP_PROP_GAIN** Gain of the image (only for cameras).
+     -   **CAP_PROP_EXPOSURE** Exposure (only for cameras).
+     -   **CAP_PROP_CONVERT_RGB** Boolean flags indicating whether images should be converted
          to RGB.
-     -   **CV_CAP_PROP_WHITE_BALANCE** Currently unsupported
-     -   **CV_CAP_PROP_RECTIFICATION** Rectification flag for stereo cameras (note: only supported
+     -   **CAP_PROP_WHITE_BALANCE** Currently unsupported
+     -   **CAP_PROP_RECTIFICATION** Rectification flag for stereo cameras (note: only supported
          by DC1394 v 2.x backend currently)
     @param value Value of the property.
      */
@@ -554,31 +577,31 @@ public:
     /** @brief Returns the specified VideoCapture property
 
     @param propId Property identifier. It can be one of the following:
-     -   **CV_CAP_PROP_POS_MSEC** Current position of the video file in milliseconds or video
+     -   **CAP_PROP_POS_MSEC** Current position of the video file in milliseconds or video
          capture timestamp.
-     -   **CV_CAP_PROP_POS_FRAMES** 0-based index of the frame to be decoded/captured next.
-     -   **CV_CAP_PROP_POS_AVI_RATIO** Relative position of the video file: 0 - start of the
+     -   **CAP_PROP_POS_FRAMES** 0-based index of the frame to be decoded/captured next.
+     -   **CAP_PROP_POS_AVI_RATIO** Relative position of the video file: 0 - start of the
          film, 1 - end of the film.
-     -   **CV_CAP_PROP_FRAME_WIDTH** Width of the frames in the video stream.
-     -   **CV_CAP_PROP_FRAME_HEIGHT** Height of the frames in the video stream.
-     -   **CV_CAP_PROP_FPS** Frame rate.
-     -   **CV_CAP_PROP_FOURCC** 4-character code of codec.
-     -   **CV_CAP_PROP_FRAME_COUNT** Number of frames in the video file.
-     -   **CV_CAP_PROP_FORMAT** Format of the Mat objects returned by retrieve() .
-     -   **CV_CAP_PROP_MODE** Backend-specific value indicating the current capture mode.
-     -   **CV_CAP_PROP_BRIGHTNESS** Brightness of the image (only for cameras).
-     -   **CV_CAP_PROP_CONTRAST** Contrast of the image (only for cameras).
-     -   **CV_CAP_PROP_SATURATION** Saturation of the image (only for cameras).
-     -   **CV_CAP_PROP_HUE** Hue of the image (only for cameras).
-     -   **CV_CAP_PROP_GAIN** Gain of the image (only for cameras).
-     -   **CV_CAP_PROP_EXPOSURE** Exposure (only for cameras).
-     -   **CV_CAP_PROP_CONVERT_RGB** Boolean flags indicating whether images should be converted
+     -   **CAP_PROP_FRAME_WIDTH** Width of the frames in the video stream.
+     -   **CAP_PROP_FRAME_HEIGHT** Height of the frames in the video stream.
+     -   **CAP_PROP_FPS** Frame rate.
+     -   **CAP_PROP_FOURCC** 4-character code of codec.
+     -   **CAP_PROP_FRAME_COUNT** Number of frames in the video file.
+     -   **CAP_PROP_FORMAT** Format of the Mat objects returned by retrieve() .
+     -   **CAP_PROP_MODE** Backend-specific value indicating the current capture mode.
+     -   **CAP_PROP_BRIGHTNESS** Brightness of the image (only for cameras).
+     -   **CAP_PROP_CONTRAST** Contrast of the image (only for cameras).
+     -   **CAP_PROP_SATURATION** Saturation of the image (only for cameras).
+     -   **CAP_PROP_HUE** Hue of the image (only for cameras).
+     -   **CAP_PROP_GAIN** Gain of the image (only for cameras).
+     -   **CAP_PROP_EXPOSURE** Exposure (only for cameras).
+     -   **CAP_PROP_CONVERT_RGB** Boolean flags indicating whether images should be converted
          to RGB.
-     -   **CV_CAP_PROP_WHITE_BALANCE** Currently not supported
-     -   **CV_CAP_PROP_RECTIFICATION** Rectification flag for stereo cameras (note: only supported
+     -   **CAP_PROP_WHITE_BALANCE** Currently not supported
+     -   **CAP_PROP_RECTIFICATION** Rectification flag for stereo cameras (note: only supported
          by DC1394 v 2.x backend currently)
 
-    **Note**: When querying a property that is not supported by the backend used by the VideoCapture
+    @note When querying a property that is not supported by the backend used by the VideoCapture
     class, value 0 is returned.
      */
     CV_WRAP virtual double get(int propId) const;
@@ -586,9 +609,9 @@ public:
 protected:
     Ptr<CvCapture> cap;
     Ptr<IVideoCapture> icap;
-private:
-    static Ptr<IVideoCapture> createCameraCapture(int index);
 };
+
+class IVideoWriter;
 
 /** @brief Video writer class.
  */
@@ -642,6 +665,25 @@ public:
      */
     CV_WRAP virtual void write(const Mat& image);
 
+    /** @brief Sets a property in the VideoWriter.
+
+     @param propId Property identifier. It can be one of the following:
+     -   **VIDEOWRITER_PROP_QUALITY** Quality (0..100%) of the videostream encoded. Can be adjusted dynamically in some codecs.
+     @param value Value of the property.
+     */
+    CV_WRAP virtual bool set(int propId, double value);
+
+    /** @brief Returns the specified VideoWriter property
+
+     @param propId Property identifier. It can be one of the following:
+     -   **VIDEOWRITER_PROP_QUALITY** Current quality of the encoded videostream.
+     -   **VIDEOWRITER_PROP_FRAMEBYTES** (Read-only) Size of just encoded video frame; note that the encoding order may be different from representation order.
+
+     @note When querying a property that is not supported by the backend used by the VideoWriter
+     class, value 0 is returned.
+     */
+    CV_WRAP virtual double get(int propId) const;
+
     /** @brief Concatenates 4 chars to a fourcc code
 
     This static method constructs the fourcc code of the codec to be used in the constructor
@@ -651,6 +693,10 @@ public:
 
 protected:
     Ptr<CvVideoWriter> writer;
+    Ptr<IVideoWriter> iwriter;
+
+    static Ptr<IVideoWriter> create(const String& filename, int fourcc, double fps,
+                                    Size frameSize, bool isColor = true);
 };
 
 template<> CV_EXPORTS void DefaultDeleter<CvCapture>::operator ()(CvCapture* obj) const;

@@ -297,10 +297,11 @@ public:
         COMPRESSED_INPUT=2,
         PREPROCESSED_INPUT=4
     };
-    CV_WRAP virtual void clear();
 
     /** @brief Returns the number of variables in training samples */
     CV_WRAP virtual int getVarCount() const = 0;
+
+    CV_WRAP virtual bool empty() const;
 
     /** @brief Returns true if the model is trained */
     CV_WRAP virtual bool isTrained() const = 0;
@@ -347,40 +348,6 @@ public:
      */
     CV_WRAP virtual float predict( InputArray samples, OutputArray results=noArray(), int flags=0 ) const = 0;
 
-    /** @brief Loads model from the file
-
-    This is static template method of StatModel. It's usage is following (in the case of SVM):
-    @code
-    Ptr<SVM> svm = StatModel::load<SVM>("my_svm_model.xml");
-    @endcode
-    In order to make this method work, the derived class must overwrite Algorithm::read(const
-    FileNode& fn).
-     */
-    template<typename _Tp> static Ptr<_Tp> load(const String& filename)
-    {
-        FileStorage fs(filename, FileStorage::READ);
-        Ptr<_Tp> model = _Tp::create();
-        model->read(fs.getFirstTopLevelNode());
-        return model->isTrained() ? model : Ptr<_Tp>();
-    }
-
-    /** @brief Loads model from a String
-
-    @param strModel The string variable containing the model you want to load.
-
-    This is static template method of StatModel. It's usage is following (in the case of SVM):
-    @code
-    Ptr<SVM> svm = StatModel::loadFromString<SVM>(myStringModel);
-    @endcode
-     */
-    template<typename _Tp> static Ptr<_Tp> loadFromString(const String& strModel)
-    {
-        FileStorage fs(strModel, FileStorage::READ + FileStorage::MEMORY);
-        Ptr<_Tp> model = _Tp::create();
-        model->read(fs.getFirstTopLevelNode());
-        return model->isTrained() ? model : Ptr<_Tp>();
-    }
-
     /** @brief Create and train model with default parameters
 
     The class must implement static `create()` method with no parameters or with all default parameter values
@@ -390,14 +357,6 @@ public:
         Ptr<_Tp> model = _Tp::create();
         return !model.empty() && model->train(data, flags) ? model : Ptr<_Tp>();
     }
-
-    /** Saves the model to a file.
-    In order to make this method work, the derived class must implement Algorithm::write(FileStorage& fs). */
-    CV_WRAP virtual void save(const String& filename) const;
-
-    /** Returns model string identifier.
-    This string is used as top level xml/yml node tag when model is saved to a file or string. */
-    CV_WRAP virtual String getDefaultModelName() const = 0;
 };
 
 /****************************************************************************************\
@@ -939,7 +898,7 @@ public:
 
     /** Creates empty %EM model.
     The model should be trained then using StatModel::train(traindata, flags) method. Alternatively, you
-    can use one of the EM::train\* methods or load it from file using StatModel::load\<EM\>(filename).
+    can use one of the EM::train\* methods or load it from file using Algorithm::load\<EM\>(filename).
      */
     CV_WRAP static Ptr<EM> create();
 };
@@ -1127,7 +1086,7 @@ public:
 
     The static method creates empty decision tree with the specified parameters. It should be then
     trained using train method (see StatModel::train). Alternatively, you can load the model from
-    file using StatModel::load\<DTrees\>(filename).
+    file using Algorithm::load\<DTrees\>(filename).
      */
     CV_WRAP static Ptr<DTrees> create();
 };
@@ -1181,7 +1140,7 @@ public:
 
     /** Creates the empty model.
     Use StatModel::train to train the model, StatModel::train to create and train the model,
-    StatModel::load to load the pre-trained model.
+    Algorithm::load to load the pre-trained model.
      */
     CV_WRAP static Ptr<RTrees> create();
 };
@@ -1231,7 +1190,7 @@ public:
     };
 
     /** Creates the empty model.
-    Use StatModel::train to train the model, StatModel::load\<Boost\>(filename) to load the pre-trained model. */
+    Use StatModel::train to train the model, Algorithm::load\<Boost\>(filename) to load the pre-trained model. */
     CV_WRAP static Ptr<Boost> create();
 };
 
@@ -1282,7 +1241,7 @@ Additional flags for StatModel::train are available: ANN_MLP::TrainFlags.
 
 @sa @ref ml_intro_ann
  */
-class CV_EXPORTS ANN_MLP : public StatModel
+class CV_EXPORTS_W ANN_MLP : public StatModel
 {
 public:
     /** Available training methods */
@@ -1296,10 +1255,10 @@ public:
     @param param1 passed to setRpropDW0 for ANN_MLP::RPROP and to setBackpropWeightScale for ANN_MLP::BACKPROP
     @param param2 passed to setRpropDWMin for ANN_MLP::RPROP and to setBackpropMomentumScale for ANN_MLP::BACKPROP.
     */
-    virtual void setTrainMethod(int method, double param1 = 0, double param2 = 0) = 0;
+    CV_WRAP virtual void setTrainMethod(int method, double param1 = 0, double param2 = 0) = 0;
 
     /** Returns current training method */
-    virtual int getTrainMethod() const = 0;
+    CV_WRAP virtual int getTrainMethod() const = 0;
 
     /** Initialize the activation function for each neuron.
     Currently the default and the only fully supported activation function is ANN_MLP::SIGMOID_SYM.
@@ -1307,79 +1266,79 @@ public:
     @param param1 The first parameter of the activation function, \f$\alpha\f$. Default value is 0.
     @param param2 The second parameter of the activation function, \f$\beta\f$. Default value is 0.
     */
-    virtual void setActivationFunction(int type, double param1 = 0, double param2 = 0) = 0;
+    CV_WRAP virtual void setActivationFunction(int type, double param1 = 0, double param2 = 0) = 0;
 
     /**  Integer vector specifying the number of neurons in each layer including the input and output layers.
     The very first element specifies the number of elements in the input layer.
     The last element - number of elements in the output layer. Default value is empty Mat.
     @sa getLayerSizes */
-    virtual void setLayerSizes(InputArray _layer_sizes) = 0;
+    CV_WRAP virtual void setLayerSizes(InputArray _layer_sizes) = 0;
 
     /**  Integer vector specifying the number of neurons in each layer including the input and output layers.
     The very first element specifies the number of elements in the input layer.
     The last element - number of elements in the output layer.
     @sa setLayerSizes */
-    virtual cv::Mat getLayerSizes() const = 0;
+    CV_WRAP virtual cv::Mat getLayerSizes() const = 0;
 
     /** Termination criteria of the training algorithm.
     You can specify the maximum number of iterations (maxCount) and/or how much the error could
     change between the iterations to make the algorithm continue (epsilon). Default value is
     TermCriteria(TermCriteria::MAX_ITER + TermCriteria::EPS, 1000, 0.01).*/
     /** @see setTermCriteria */
-    virtual TermCriteria getTermCriteria() const = 0;
+    CV_WRAP virtual TermCriteria getTermCriteria() const = 0;
     /** @copybrief getTermCriteria @see getTermCriteria */
-    virtual void setTermCriteria(TermCriteria val) = 0;
+    CV_WRAP virtual void setTermCriteria(TermCriteria val) = 0;
 
     /** BPROP: Strength of the weight gradient term.
     The recommended value is about 0.1. Default value is 0.1.*/
     /** @see setBackpropWeightScale */
-    virtual double getBackpropWeightScale() const = 0;
+    CV_WRAP virtual double getBackpropWeightScale() const = 0;
     /** @copybrief getBackpropWeightScale @see getBackpropWeightScale */
-    virtual void setBackpropWeightScale(double val) = 0;
+    CV_WRAP virtual void setBackpropWeightScale(double val) = 0;
 
     /** BPROP: Strength of the momentum term (the difference between weights on the 2 previous iterations).
     This parameter provides some inertia to smooth the random fluctuations of the weights. It can
     vary from 0 (the feature is disabled) to 1 and beyond. The value 0.1 or so is good enough.
     Default value is 0.1.*/
     /** @see setBackpropMomentumScale */
-    virtual double getBackpropMomentumScale() const = 0;
+    CV_WRAP virtual double getBackpropMomentumScale() const = 0;
     /** @copybrief getBackpropMomentumScale @see getBackpropMomentumScale */
-    virtual void setBackpropMomentumScale(double val) = 0;
+    CV_WRAP virtual void setBackpropMomentumScale(double val) = 0;
 
     /** RPROP: Initial value \f$\Delta_0\f$ of update-values \f$\Delta_{ij}\f$.
     Default value is 0.1.*/
     /** @see setRpropDW0 */
-    virtual double getRpropDW0() const = 0;
+    CV_WRAP virtual double getRpropDW0() const = 0;
     /** @copybrief getRpropDW0 @see getRpropDW0 */
-    virtual void setRpropDW0(double val) = 0;
+    CV_WRAP virtual void setRpropDW0(double val) = 0;
 
     /** RPROP: Increase factor \f$\eta^+\f$.
     It must be \>1. Default value is 1.2.*/
     /** @see setRpropDWPlus */
-    virtual double getRpropDWPlus() const = 0;
+    CV_WRAP virtual double getRpropDWPlus() const = 0;
     /** @copybrief getRpropDWPlus @see getRpropDWPlus */
-    virtual void setRpropDWPlus(double val) = 0;
+    CV_WRAP virtual void setRpropDWPlus(double val) = 0;
 
     /** RPROP: Decrease factor \f$\eta^-\f$.
     It must be \<1. Default value is 0.5.*/
     /** @see setRpropDWMinus */
-    virtual double getRpropDWMinus() const = 0;
+    CV_WRAP virtual double getRpropDWMinus() const = 0;
     /** @copybrief getRpropDWMinus @see getRpropDWMinus */
-    virtual void setRpropDWMinus(double val) = 0;
+    CV_WRAP virtual void setRpropDWMinus(double val) = 0;
 
     /** RPROP: Update-values lower limit \f$\Delta_{min}\f$.
     It must be positive. Default value is FLT_EPSILON.*/
     /** @see setRpropDWMin */
-    virtual double getRpropDWMin() const = 0;
+    CV_WRAP virtual double getRpropDWMin() const = 0;
     /** @copybrief getRpropDWMin @see getRpropDWMin */
-    virtual void setRpropDWMin(double val) = 0;
+    CV_WRAP virtual void setRpropDWMin(double val) = 0;
 
     /** RPROP: Update-values upper limit \f$\Delta_{max}\f$.
     It must be \>1. Default value is 50.*/
     /** @see setRpropDWMax */
-    virtual double getRpropDWMax() const = 0;
+    CV_WRAP virtual double getRpropDWMax() const = 0;
     /** @copybrief getRpropDWMax @see getRpropDWMax */
-    virtual void setRpropDWMax(double val) = 0;
+    CV_WRAP virtual void setRpropDWMax(double val) = 0;
 
     /** possible activation functions */
     enum ActivationFunctions {
@@ -1412,14 +1371,14 @@ public:
         NO_OUTPUT_SCALE = 4
     };
 
-    virtual Mat getWeights(int layerIdx) const = 0;
+    CV_WRAP virtual Mat getWeights(int layerIdx) const = 0;
 
     /** @brief Creates empty model
 
-    Use StatModel::train to train the model, StatModel::load\<ANN_MLP\>(filename) to load the pre-trained model.
+    Use StatModel::train to train the model, Algorithm::load\<ANN_MLP\>(filename) to load the pre-trained model.
     Note that the train method has optional flags: ANN_MLP::TrainFlags.
      */
-    static Ptr<ANN_MLP> create();
+    CV_WRAP static Ptr<ANN_MLP> create();
 };
 
 /****************************************************************************************\
