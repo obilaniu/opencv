@@ -45,6 +45,8 @@ namespace cv
 
 enum { XY_SHIFT = 16, XY_ONE = 1 << XY_SHIFT, DRAWING_STORAGE_BLOCK = (1<<12) - 256 };
 
+static const int MAX_THICKNESS = 32767;
+
 struct PolyEdge
 {
     PolyEdge() : y0(0), y1(0), x(0), dx(0), next(0) {}
@@ -1664,7 +1666,7 @@ void line( InputOutputArray _img, Point pt1, Point pt2, const Scalar& color,
     if( line_type == CV_AA && img.depth() != CV_8U )
         line_type = 8;
 
-    CV_Assert( 0 <= thickness && thickness <= 255 );
+    CV_Assert( 0 <= thickness && thickness <= MAX_THICKNESS );
     CV_Assert( 0 <= shift && shift <= XY_SHIFT );
 
     double buf[4];
@@ -1699,7 +1701,7 @@ void rectangle( InputOutputArray _img, Point pt1, Point pt2,
     if( lineType == CV_AA && img.depth() != CV_8U )
         lineType = 8;
 
-    CV_Assert( thickness <= 255 );
+    CV_Assert( thickness <= MAX_THICKNESS );
     CV_Assert( 0 <= shift && shift <= XY_SHIFT );
 
     double buf[4];
@@ -1740,7 +1742,7 @@ void circle( InputOutputArray _img, Point center, int radius,
     if( line_type == CV_AA && img.depth() != CV_8U )
         line_type = 8;
 
-    CV_Assert( radius >= 0 && thickness <= 255 &&
+    CV_Assert( radius >= 0 && thickness <= MAX_THICKNESS &&
         0 <= shift && shift <= XY_SHIFT );
 
     double buf[4];
@@ -1769,7 +1771,7 @@ void ellipse( InputOutputArray _img, Point center, Size axes,
         line_type = 8;
 
     CV_Assert( axes.width >= 0 && axes.height >= 0 &&
-        thickness <= 255 && 0 <= shift && shift <= XY_SHIFT );
+        thickness <= MAX_THICKNESS && 0 <= shift && shift <= XY_SHIFT );
 
     double buf[4];
     scalarToRawData(color, buf, img.type(), 0);
@@ -1795,7 +1797,7 @@ void ellipse(InputOutputArray _img, const RotatedRect& box, const Scalar& color,
         lineType = 8;
 
     CV_Assert( box.size.width >= 0 && box.size.height >= 0 &&
-               thickness <= 255 );
+               thickness <= MAX_THICKNESS );
 
     double buf[4];
     scalarToRawData(color, buf, img.type(), 0);
@@ -1857,7 +1859,7 @@ void polylines( Mat& img, const Point* const* pts, const int* npts, int ncontour
         line_type = 8;
 
     CV_Assert( pts && npts && ncontours >= 0 &&
-               0 <= thickness && thickness <= 255 &&
+               0 <= thickness && thickness <= MAX_THICKNESS &&
                0 <= shift && shift <= XY_SHIFT );
 
     double buf[4];
@@ -1941,7 +1943,11 @@ static const int HersheyComplex[] = {
 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026, 2223, 2084,
 2224, 2247, 587, 2249, 2101, 2102, 2103, 2104, 2105, 2106, 2107, 2108, 2109, 2110, 2111,
 2112, 2113, 2114, 2115, 2116, 2117, 2118, 2119, 2120, 2121, 2122, 2123, 2124, 2125, 2126,
-2225, 2229, 2226, 2246 };
+2225, 2229, 2226, 2246, 2801, 2802, 2803, 2804, 2805, 2806, 2807, 2808, 2809, 2810, 2811,
+2812, 2813, 2814, 2815, 2816, 2817, 2818, 2819, 2820, 2821, 2822, 2823, 2824, 2825, 2826,
+2827, 2828, 2829, 2830, 2831, 2832, 2901, 2902, 2903, 2904, 2905, 2906, 2907, 2908, 2909,
+2910, 2911, 2912, 2913, 2914, 2915, 2916, 2917, 2918, 2919, 2920, 2921, 2922, 2923, 2924,
+2925, 2926, 2927, 2928, 2929, 2930, 2931, 2932};
 
 static const int HersheyComplexItalic[] = {
 (9 + 12*16) + FONT_ITALIC_ALPHA + FONT_ITALIC_DIGIT + FONT_ITALIC_PUNCT +
@@ -2033,6 +2039,50 @@ static const int* getFontData(int fontFace)
     return ascii;
 }
 
+inline void readCheck(int &c, int &i, const String &text, int fontFace)
+{
+
+    int leftBoundary = ' ', rightBoundary = 127;
+
+    if(c >= 0x80 && fontFace == FONT_HERSHEY_COMPLEX)
+    {
+        if(c == 0xD0 && (uchar)text[i + 1] >= 0x90 && (uchar)text[i + 1] <= 0xBF)
+        {
+            c = (uchar)text[++i] - 17;
+            leftBoundary = 127;
+            rightBoundary = 175;
+        }
+        else if(c == 0xD1 && (uchar)text[i + 1] >= 0x80 && (uchar)text[i + 1] <= 0x8F)
+        {
+            c = (uchar)text[++i] + 47;
+            leftBoundary = 175;
+            rightBoundary = 191;
+        }
+        else
+        {
+            if(c >= 0xC0 && text[i+1] != 0) //2 bytes utf
+                i++;
+
+            if(c >= 0xE0 && text[i+1] != 0) //3 bytes utf
+                i++;
+
+            if(c >= 0xF0 && text[i+1] != 0) //4 bytes utf
+                i++;
+
+            if(c >= 0xF8 && text[i+1] != 0) //5 bytes utf
+                i++;
+
+            if(c >= 0xFC && text[i+1] != 0) //6 bytes utf
+                i++;
+
+            c = '?';
+        }
+    }
+
+    if(c >= rightBoundary || c < leftBoundary)
+        c = '?';
+}
+
 extern const char* g_HersheyGlyphs[];
 
 void putText( InputOutputArray _img, const String& text, Point org,
@@ -2066,8 +2116,7 @@ void putText( InputOutputArray _img, const String& text, Point org,
         int c = (uchar)text[i];
         Point p;
 
-        if( c >= 127 || c < ' ' )
-            c = '?';
+        readCheck(c, i, text, fontFace);
 
         const char* ptr = faces[ascii[(c-' ')+1]];
         p.x = (uchar)ptr[0] - 'R';
@@ -2114,8 +2163,7 @@ Size getTextSize( const String& text, int fontFace, double fontScale, int thickn
         int c = (uchar)text[i];
         Point p;
 
-        if( c >= 127 || c < ' ' )
-            c = '?';
+        readCheck(c, i, text, fontFace);
 
         const char* ptr = faces[ascii[(c-' ')+1]];
         p.x = (uchar)ptr[0] - 'R';
@@ -2183,7 +2231,10 @@ void cv::polylines(InputOutputArray _img, InputArrayOfArrays pts,
     {
         Mat p = pts.getMat(manyContours ? i : -1);
         if( p.total() == 0 )
+        {
+            npts[i] = 0;
             continue;
+        }
         CV_Assert(p.checkVector(2, CV_32S) >= 0);
         ptsptr[i] = p.ptr<Point>();
         npts[i] = p.rows*p.cols*p.channels()/2;
@@ -2329,7 +2380,7 @@ cvDrawContours( void* _img, CvSeq* contour,
     if( !contour )
         return;
 
-    CV_Assert( thickness <= 255 );
+    CV_Assert( thickness <= MAX_THICKNESS );
 
     scalarToRawData( externalColor, ext_buf, img.type(), 0 );
     scalarToRawData( holeColor, hole_buf, img.type(), 0 );

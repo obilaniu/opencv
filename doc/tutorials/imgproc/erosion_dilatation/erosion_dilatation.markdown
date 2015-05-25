@@ -61,7 +61,7 @@ Code
 
 This tutorial code's is shown lines below. You can also download it from
 [here](https://github.com/Itseez/opencv/tree/master/samples/cpp/tutorial_code/ImgProc/Morphology_1.cpp)
-@includelineno samples/cpp/tutorial_code/ImgProc/Morphology_1.cpp
+@include samples/cpp/tutorial_code/ImgProc/Morphology_1.cpp
 
 Explanation
 -----------
@@ -69,7 +69,7 @@ Explanation
 -#  Most of the stuff shown is known by you (if you have any doubt, please refer to the tutorials in
     previous sections). Let's check the general structure of the program:
 
-    -   Load an image (can be RGB or grayscale)
+    -   Load an image (can be BGR or grayscale)
     -   Create two windows (one for dilation output, the other for erosion)
     -   Create a set of 02 Trackbars for each operation:
         -   The first trackbar "Element" returns either **erosion_elem** or **dilation_elem**
