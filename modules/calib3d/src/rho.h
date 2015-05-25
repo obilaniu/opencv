@@ -73,6 +73,9 @@
 #ifndef RHO_FLAG_ENABLE_FINAL_REFINEMENT
 #define RHO_FLAG_ENABLE_FINAL_REFINEMENT     (1U<<2)
 #endif
+#ifndef RHO_FLAG_ENABLE_PRECONDITIONING
+#define RHO_FLAG_ENABLE_PRECONDITIONING      (1U<<3)
+#endif
 
 
 
@@ -195,6 +198,9 @@ void rhoSeed(Ptr<RHO_HEST> p, uint64_t seed);
  *           HEST_FLAG_ENABLE_FINAL_REFINEMENT:
  *               Enable one final refinement of the best model found before
  *               returning it.
+ *           HEST_FLAG_ENABLE_PRECONDITIONING:
+ *               Enable Hartley preconditioning, as described in his article
+ *               "In Defense of the Eight Point Algorithm".
  *
  * The PROSAC estimator optionally accepts an extrinsic initial guess of H.
  *

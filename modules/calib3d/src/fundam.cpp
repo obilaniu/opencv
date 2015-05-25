@@ -321,7 +321,7 @@ static bool createAndRunRHORegistrator(double confidence,
                       confidence,
                       4U,
                       beta,
-                      RHO_FLAG_ENABLE_NR | RHO_FLAG_ENABLE_FINAL_REFINEMENT,
+                      RHO_FLAG_ENABLE_NR | RHO_FLAG_ENABLE_FINAL_REFINEMENT /* | RHO_FLAG_ENABLE_PRECONDITIONING */,
                       NULL,
                       (float*)tmpH.data);
 

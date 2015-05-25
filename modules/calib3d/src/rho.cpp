@@ -272,6 +272,18 @@ struct RHO_HEST_REFC : RHO_HEST{
         unsigned* smpl;            /* Sample of match indexes */
     } ctrl;
 
+    /* Data & Preconditioning */
+    struct{
+        float*    srcx;            /* Source points, X-coord */
+        float*    srcy;            /* Source points, Y-coord */
+        float*    dstx;            /* Destination points, X-coord */
+        float*    dsty;            /* Destination points, Y-coord */
+        float     tx, ty;          /* Translation of source points. */
+        float     s;               /* Scaling of source points. */
+        float     tX, tY;          /* Translation of destination points. */
+        float     S;               /* Scaling of destination points. */
+    } data;
+
     /* Current model being tested */
     struct{
         float*    pkdPts;          /* Packed points */
@@ -310,6 +322,10 @@ struct RHO_HEST_REFC : RHO_HEST{
 
     /* Levenberg-Marquardt Refinement */
     struct{
+        float*    srcx;            /* Source inlier points, X-coord */
+        float*    srcy;            /* Source inlier points, Y-coord */
+        float*    dstx;            /* Destination inlier points, X-coord */
+        float*    dsty;            /* Destination inlier points, Y-coord */
         float  (* JtJ)[8];         /* JtJ matrix */
         float  (* tmp1)[8];        /* Temporary 1 */
         float*    Jte;             /* Jte vector */
@@ -366,6 +382,8 @@ struct RHO_HEST_REFC : RHO_HEST{
     inline int    isNREnabled(void);
     inline int    isRefineEnabled(void);
     inline int    isFinalRefineEnabled(void);
+    inline int    isPreconditioningEnabled(void);
+    inline void   preconditionMatches(void);
     inline int    PROSACPhaseEndReached(void);
     inline void   PROSACGoToNextPhase(void);
     inline void   getPROSACSample(void);
@@ -387,6 +405,7 @@ struct RHO_HEST_REFC : RHO_HEST{
     inline void   outputZeroH(void);
     inline int    canRefine(void);
     inline void   refine(void);
+    inline void   compressRefinementInliers(void);
 };
 
 
@@ -409,9 +428,10 @@ static inline unsigned sacCalcIterBound   (double   confidence,
                                            unsigned maxIterBound);
 static inline void   hFuncRefC            (float* packedPoints, float* H);
 static inline void   sacCalcJacobianErrors(const float* H,
-                                           const float* src,
-                                           const float* dst,
-                                           const char*  inl,
+                                           const float* srcx,
+                                           const float* srcy,
+                                           const float* dstx,
+                                           const float* dsty,
                                            unsigned     N,
                                            float     (* JtJ)[8],
                                            float*       Jte,
@@ -835,8 +855,16 @@ inline void   RHO_HEST_REFC::allocatePerObj(void){
 
 inline void   RHO_HEST_REFC::allocatePerRun(void){
     /* We have known sizes */
-    size_t best_inl_sz = arg.N;
-    size_t curr_inl_sz = arg.N;
+    size_t best_inl_sz  = arg.N;
+    size_t curr_inl_sz  = arg.N;
+    size_t data_srcx_sz = arg.N*sizeof(float);
+    size_t data_srcy_sz = arg.N*sizeof(float);
+    size_t data_dstx_sz = arg.N*sizeof(float);
+    size_t data_dsty_sz = arg.N*sizeof(float);
+    size_t lm_srcx_sz   = arg.N*sizeof(float);
+    size_t lm_srcy_sz   = arg.N*sizeof(float);
+    size_t lm_dstx_sz   = arg.N*sizeof(float);
+    size_t lm_dsty_sz   = arg.N*sizeof(float);
 
     /* We compute offsets */
     size_t total = 0;
@@ -846,6 +874,14 @@ inline void   RHO_HEST_REFC::allocatePerRun(void){
 
     MK_OFFSET(best_inl);
     MK_OFFSET(curr_inl);
+    MK_OFFSET(data_srcx);
+    MK_OFFSET(data_srcy);
+    MK_OFFSET(data_dstx);
+    MK_OFFSET(data_dsty);
+    MK_OFFSET(lm_srcx);
+    MK_OFFSET(lm_srcy);
+    MK_OFFSET(lm_dstx);
+    MK_OFFSET(lm_dsty);
 
 #undef MK_OFFSET
 
@@ -856,8 +892,16 @@ inline void   RHO_HEST_REFC::allocatePerRun(void){
     unsigned char* ptr = alignPtr(mem.perRun.data, MEM_ALIGN);
 
     /* Assign pointers */
-    best.inl  = (char*)(ptr + best_inl_of);
-    curr.inl  = (char*)(ptr + curr_inl_of);
+    best.inl  = (char*) (ptr + best_inl_of);
+    curr.inl  = (char*) (ptr + curr_inl_of);
+    data.srcx = (float*)(ptr + data_srcx_of);
+    data.srcy = (float*)(ptr + data_srcy_of);
+    data.dstx = (float*)(ptr + data_dstx_of);
+    data.dsty = (float*)(ptr + data_dsty_of);
+    lm.srcx   = (float*)(ptr + lm_srcx_of);
+    lm.srcy   = (float*)(ptr + lm_srcy_of);
+    lm.dstx   = (float*)(ptr + lm_dstx_of);
+    lm.dsty   = (float*)(ptr + lm_dsty_of);
 }
 
 
@@ -870,6 +914,14 @@ inline void   RHO_HEST_REFC::allocatePerRun(void){
 inline void   RHO_HEST_REFC::deallocatePerRun(void){
     best.inl  = NULL;
     curr.inl  = NULL;
+    data.srcx = NULL;
+    data.srcy = NULL;
+    data.dstx = NULL;
+    data.dsty = NULL;
+    lm.srcx   = NULL;
+    lm.srcy   = NULL;
+    lm.dstx   = NULL;
+    lm.dsty   = NULL;
 
     mem.perRun.release();
 }
@@ -956,16 +1008,17 @@ inline int    RHO_HEST_REFC::initRun(void){
     }
 
     /**
-     * Inlier mask alloc.
+     * Inlier mask, source and destination alloc.
      *
      * Runs second because we want to quit as fast as possible if we can't even
-     * allocate the two masks.
+     * allocate the memory for the algorithm.
      */
 
     allocatePerRun();
 
     memset(best.inl, 0, arg.N);
     memset(curr.inl, 0, arg.N);
+    preconditionMatches();
 
     /**
      * Reset scalar per-run state.
@@ -1017,6 +1070,106 @@ inline int    RHO_HEST_REFC::initRun(void){
 
 inline void   RHO_HEST_REFC::finiRun(void){
     deallocatePerRun();
+}
+
+/**
+ * Preconditions the matches, if requested.
+ *
+ * Unnormalized matches, used without preprocessing, can easily lead to
+ * matrices with extremely large condition numbers, and thus to inaccurate
+ * solutions for F (and therefore H).
+ *
+ * Richard Hartley, in his article "In Defense of the Eight Point Algorithm"
+ * (http://www.cse.unr.edu/~bebis/CS485/Handouts/hartley.pdf), suggested that
+ * a simple preprocessing step can greatly improve the numerical stability of
+ * the calculation. Namely, both the source and destination points are
+ * individually given the following treatment:
+ *
+ *     1. The matches are translated s.t. their mean is the origin (0,0).
+ *     2. The matches are scaled     s.t. their distance to the origin
+ *        is sqrt(2).
+ *
+ * The numerical problem then solved is no longer the actual homography H, but
+ * rather a homography Hpre from which two translations and scalings have been
+ * factored out. Given
+ *
+ *     x' = Hx
+ *
+ * we are now solving for
+ *
+ *     x' = T' S' Hpre S T x
+ *
+ * where
+ *
+ *     H = T' S' Hpre S T
+ *
+ * .
+ *
+ * Reads:  arg.flags, arg.src, arg.dst
+ * Writes: data.*
+ */
+
+inline void   RHO_HEST_REFC::preconditionMatches(void){
+    unsigned i;
+
+
+    data.tx = data.ty = data.s = 0;
+    data.tX = data.tY = data.S = 0;
+
+
+    if(isPreconditioningEnabled()){
+        /**
+         * We compute the mean, then the scale. We then translate and scale the
+         * points appropriately.
+         */
+
+        /* COMPUTE MEAN */
+        for(i=0;i<arg.N;i++){
+            data.tx += arg.src[2*i+0];
+            data.ty += arg.src[2*i+1];
+            data.tX += arg.dst[2*i+0];
+            data.tY += arg.dst[2*i+1];
+        }
+        data.tx /= arg.N;
+        data.ty /= arg.N;
+        data.tX /= arg.N;
+        data.tY /= arg.N;
+        //data.tx = data.ty = data.tX = data.tY = 0;
+
+        /* TRANSLATE POINTS & COMPUTE SCALE */
+        for(i=0;i<arg.N;i++){
+            float normx = data.srcx[i] = arg.src[2*i+0]-data.tx,
+                  normy = data.srcy[i] = arg.src[2*i+1]-data.ty,
+                  normX = data.dstx[i] = arg.dst[2*i+0]-data.tX,
+                  normY = data.dsty[i] = arg.dst[2*i+1]-data.tY;
+
+            data.s += normx*normx + normy*normy;
+            data.S += normX*normX + normY*normY;
+        }
+
+        /* We want average magnitude sqrt(2), NOT unity. */
+        data.s = sqrtf(data.s/(2.0*arg.N));
+        data.S = sqrtf(data.S/(2.0*arg.N));
+        //data.s = data.S = 1.0;
+
+        /* SCALE POINTS */
+        float invs = 1.0f/data.s;
+        float invS = 1.0f/data.S;
+        for(i=0;i<arg.N;i++){
+            data.srcx[i] *= invs;
+            data.srcy[i] *= invs;
+            data.dstx[i] *= invS;
+            data.dsty[i] *= invS;
+        }
+    }else{
+        /* We simply copy. */
+        for(i=0;i<arg.N;i++){
+            data.srcx[i] = arg.src[2*i+0];
+            data.srcy[i] = arg.src[2*i+1];
+            data.dstx[i] = arg.dst[2*i+0];
+            data.dsty[i] = arg.dst[2*i+1];
+        }
+    }
 }
 
 /**
@@ -1115,6 +1268,16 @@ inline int    RHO_HEST_REFC::isRefineEnabled(void){
 
 inline int    RHO_HEST_REFC::isFinalRefineEnabled(void){
     return arg.flags & RHO_FLAG_ENABLE_FINAL_REFINEMENT;
+}
+
+/**
+ * Check whether Hartley preconditioning is enabled.
+ *
+ * @return Zero if preconditioning disabled; non-zero if not.
+ */
+
+inline int    RHO_HEST_REFC::isPreconditioningEnabled(void){
+    return arg.flags & RHO_FLAG_ENABLE_PRECONDITIONING;
 }
 
 /**
@@ -1257,7 +1420,7 @@ inline void   RHO_HEST_REFC::rndSmpl(unsigned  sampleSize,
 inline int    RHO_HEST_REFC::isSampleDegenerate(void){
     unsigned i0 = ctrl.smpl[0], i1 = ctrl.smpl[1], i2 = ctrl.smpl[2], i3 = ctrl.smpl[3];
     typedef struct{float x,y;} MyPt2f;
-    MyPt2f* pkdPts = (MyPt2f*)curr.pkdPts, *src = (MyPt2f*)arg.src, *dst = (MyPt2f*)arg.dst;
+    MyPt2f* pkdPts = (MyPt2f*)curr.pkdPts;
 
     /**
      * Pack the matches selected by the SAC algorithm.
@@ -1266,14 +1429,22 @@ inline int    RHO_HEST_REFC::isSampleDegenerate(void){
      * Gather 4 points into the vector
      */
 
-    pkdPts[0] = src[i0];
-    pkdPts[1] = src[i1];
-    pkdPts[2] = src[i2];
-    pkdPts[3] = src[i3];
-    pkdPts[4] = dst[i0];
-    pkdPts[5] = dst[i1];
-    pkdPts[6] = dst[i2];
-    pkdPts[7] = dst[i3];
+    pkdPts[0].x = data.srcx[i0];
+    pkdPts[0].y = data.srcy[i0];
+    pkdPts[1].x = data.srcx[i1];
+    pkdPts[1].y = data.srcy[i1];
+    pkdPts[2].x = data.srcx[i2];
+    pkdPts[2].y = data.srcy[i2];
+    pkdPts[3].x = data.srcx[i3];
+    pkdPts[3].y = data.srcy[i3];
+    pkdPts[4].x = data.dstx[i0];
+    pkdPts[4].y = data.dsty[i0];
+    pkdPts[5].x = data.dstx[i1];
+    pkdPts[5].y = data.dsty[i1];
+    pkdPts[6].x = data.dstx[i2];
+    pkdPts[6].y = data.dsty[i2];
+    pkdPts[7].x = data.dstx[i3];
+    pkdPts[7].y = data.dsty[i3];
 
     /**
      * If the matches' source points have common x and y coordinates, abort.
@@ -1398,8 +1569,6 @@ inline void   RHO_HEST_REFC::evaluateModelSPRT(void){
     unsigned isInlier;
     double   lambda  = 1.0;
     float    distSq  = arg.maxD*arg.maxD;
-    const float* src = arg.src;
-    const float* dst = arg.dst;
     char*    inl     = curr.inl;
     const float*   H = curr.H;
 
@@ -1414,33 +1583,33 @@ inline void   RHO_HEST_REFC::evaluateModelSPRT(void){
     /* SCALAR */
     for(i=0;i<arg.N && eval.good;i++){
         /* Backproject */
-        float x=src[i*2],y=src[i*2+1];
-        float X=dst[i*2],Y=dst[i*2+1];
+        float x=data.srcx[i], y=data.srcy[i];
+        float X=data.dstx[i], Y=data.dsty[i];
 
-        float reprojX=H[0]*x+H[1]*y+H[2]; /*  ( X_1 )     ( H_11 H_12    H_13  ) (x_1)       */
-        float reprojY=H[3]*x+H[4]*y+H[5]; /*  ( X_2 )  =  ( H_21 H_22    H_23  ) (x_2)       */
-        float reprojZ=H[6]*x+H[7]*y+1.0f; /*  ( X_3 )     ( H_31 H_32 H_33=1.0 ) (x_3 = 1.0) */
+        float reprojX = H[0]*x + H[1]*y + H[2]; /*  ( X_1 )     ( H_11 H_12    H_13  ) (x_1)       */
+        float reprojY = H[3]*x + H[4]*y + H[5]; /*  ( X_2 )  =  ( H_21 H_22    H_23  ) (x_2)       */
+        float reprojZ = H[6]*x + H[7]*y + 1.0f; /*  ( X_3 )     ( H_31 H_32 H_33=1.0 ) (x_3 = 1.0) */
 
         /* reproj is in homogeneous coordinates. To bring back to "regular" coordinates, divide by Z. */
-        reprojX/=reprojZ;
-        reprojY/=reprojZ;
+        reprojX /= reprojZ;
+        reprojY /= reprojZ;
 
         /* Compute distance */
-        reprojX-=X;
-        reprojY-=Y;
-        reprojX*=reprojX;
-        reprojY*=reprojY;
+        reprojX -= X;
+        reprojY -= Y;
+        reprojX *= reprojX;
+        reprojY *= reprojY;
         float reprojDist = reprojX+reprojY;
 
         /* ... */
-        isInlier   = reprojDist <= distSq;
+        isInlier     = reprojDist <= distSq;
         curr.numInl += isInlier;
-        *inl++     = (char)isInlier;
+        *inl++       = (char)isInlier;
 
 
         /* SPRT */
-        lambda *= isInlier ? eval.lambdaAccept : eval.lambdaReject;
-        eval.good = lambda <= eval.A;
+        lambda    *= isInlier ? eval.lambdaAccept : eval.lambdaReject;
+        eval.good  = lambda <= eval.A;
         /* If !good, the threshold A was exceeded, so we're rejecting */
     }
 
@@ -1691,6 +1860,25 @@ inline void   RHO_HEST_REFC::updateBounds(void){
 }
 
 /**
+ * Cheap 3x3 matrix multiply.
+ */
+
+static inline void mmul3x3(float (*d)[3], const float (*a)[3], const float (*b)[3]);
+static inline void mmul3x3(float (*d)[3], const float (*a)[3], const float (*b)[3]){
+    int i, j, k;
+
+    for(i=0;i<3;i++){
+        for(j=0;j<3;j++){
+            d[i][j] = 0;
+
+            for(k=0;k<3;k++){
+                d[i][j] += a[i][k]*b[k][j];
+            }
+        }
+    }
+}
+
+/**
  * Ouput the best model so far to the output argument.
  *
  * Reads    (direct): arg.finalH, best.H, arg.inl, best.inl, arg.N
@@ -1701,7 +1889,81 @@ inline void   RHO_HEST_REFC::updateBounds(void){
 
 inline void   RHO_HEST_REFC::outputModel(void){
     if(isBestModelGoodEnough()){
-        memcpy(arg.finalH, best.H, HSIZE);
+        if(isPreconditioningEnabled()){
+            /**
+             * Undo preconditioning here.
+             *
+             * Given that best.H is the Hpre in
+             *
+             *     H  = T' S' Hpre S T
+             *     x' = Hx
+             *
+             * , we compensate by translating and scaling Hpre with the
+             * appropriate matrices:
+             *
+             *          1        0        -data.tx
+             *     T  = 0        1        -data.ty
+             *          0        0        1
+             *
+             *          1/data.s 0        0
+             *     S  = 0        1/data.s 0
+             *          0        0        1
+             *
+             *          data.S   0        0
+             *     S' = 0        data.S   0
+             *          0        0        1
+             *
+             *          1        0        data.tX
+             *     T' = 0        1        data.tY
+             *          0        0        1
+             *
+             * Giving
+             *
+             *            h00/data.s h01/data.s h02
+             *       HS = h10/data.s h11/data.s h12
+             *            h20/data.s h21/data.s h22
+             *
+             *            data.S*h00/data.s data.S*h01/data.s data.S*h02
+             *     S'HS = data.S*h10/data.s data.S*h11/data.s data.S*h12
+             *                   h20/data.s        h21/data.s        h22
+             */
+
+            float Tp[3][3] = {{1,          0,          +data.tX},
+                              {0,          1,          +data.tY},
+                              {0,          0,          1}};
+            float Sp[3][3] = {{data.S,     0,          0},
+                              {0,          data.S,     0},
+                              {0,          0,          1}};
+            float S [3][3] = {{1.0/data.s, 0,          0},
+                              {0,          1.0/data.s, 0},
+                              {0,          0,          1}};
+            float T [3][3] = {{1,          0,          -data.tx},
+                              {0,          1,          -data.ty},
+                              {0,          0,          1}};
+
+            float (*Hpre)[3]   = (float(*)[3])best.H;
+            float (*finalH)[3] = (float(*)[3])arg.finalH;
+            float tmp0[3][3];
+            float tmp1[3][3];
+
+            mmul3x3(tmp0,S,T);
+            mmul3x3(tmp1,Hpre,tmp0);
+            mmul3x3(tmp0,Sp,tmp1);
+            mmul3x3(finalH, Tp, tmp0);
+
+            arg.finalH[0] /= arg.finalH[8];
+            arg.finalH[1] /= arg.finalH[8];
+            arg.finalH[2] /= arg.finalH[8];
+            arg.finalH[3] /= arg.finalH[8];
+            arg.finalH[4] /= arg.finalH[8];
+            arg.finalH[5] /= arg.finalH[8];
+            arg.finalH[6] /= arg.finalH[8];
+            arg.finalH[7] /= arg.finalH[8];
+            arg.finalH[8] /= arg.finalH[8];
+        }else{
+            memcpy(arg.finalH, best.H, HSIZE);
+        }
+
         if(arg.inl){
             memcpy(arg.inl, best.inl, arg.N);
         }
@@ -2074,11 +2336,11 @@ inline int    RHO_HEST_REFC::canRefine(void){
 /**
  * Refines the best-so-far homography (p->best.H).
  *
- * Reads    (direct): best.H, arg.src, arg.dst, best.inl, arg.N, lm.JtJ,
- *                    lm.Jte, lm.tmp1
+ * Reads    (direct): best.H, data.srcx, data.srcy, data.dstx, data.dsty,
+ *                    best.inl, best.numInl, arg.N, lm.JtJ, lm.Jte, lm.tmp1
  * Reads   (callees): None.
  * Writes   (direct): best.H, lm.JtJ, lm.Jte, lm.tmp1
- * Writes  (callees): None.
+ * Writes  (callees): lm.srcx, lm.srcy, lm.dstx, lm.dsty
  */
 
 inline void   RHO_HEST_REFC::refine(void){
@@ -2088,12 +2350,15 @@ inline void   RHO_HEST_REFC::refine(void){
     float       L  = 100.0f;/* Lambda of LevMarq */
     float dH[8], newH[8];
 
+    /* Compress the data points. */
+    compressRefinementInliers();
+
     /**
      * Iteratively refine the homography.
      */
     /* Find initial conditions */
-    sacCalcJacobianErrors(best.H, arg.src, arg.dst, best.inl, arg.N,
-                          lm.JtJ, lm.Jte,  &S);
+    sacCalcJacobianErrors(best.H, lm.srcx, lm.srcy, lm.dstx, lm.dsty,
+                          best.numInl, lm.JtJ, lm.Jte,  &S);
 
     /*Levenberg-Marquardt Loop.*/
     for(i=0;i<MAXLEVMARQITERS;i++){
@@ -2124,8 +2389,8 @@ inline void   RHO_HEST_REFC::refine(void){
         sacTRInv8x8   (lm.tmp1, lm.tmp1);
         sacTRISolve8x8(lm.tmp1, lm.Jte,  dH);
         sacSub8x1     (newH,       best.H,  dH);
-        sacCalcJacobianErrors(newH, arg.src, arg.dst, best.inl, arg.N,
-                              NULL, NULL, &newS);
+        sacCalcJacobianErrors(newH, lm.srcx, lm.srcy, lm.dstx, lm.dsty,
+                              best.numInl, NULL, NULL,  &newS);
         gain = sacLMGain(dH, lm.Jte, S, newS, L);
         /*printf("Lambda: %12.6f  S: %12.6f  newS: %12.6f  Gain: %12.6f\n",
                  L, S, newS, gain);*/
@@ -2152,8 +2417,33 @@ inline void   RHO_HEST_REFC::refine(void){
         if(gain > 0){
             S = newS;
             memcpy(best.H, newH, sizeof(newH));
-            sacCalcJacobianErrors(best.H, arg.src, arg.dst, best.inl, arg.N,
-                                  lm.JtJ, lm.Jte,  &S);
+            sacCalcJacobianErrors(best.H, lm.srcx, lm.srcy, lm.dstx, lm.dsty,
+                                  best.numInl, lm.JtJ, lm.Jte,  &S);
+        }
+    }
+}
+
+/**
+ * Compress the inliers for refinement.
+ *
+ * Reads    (direct): arg.N, best.inl, data.srcx, data.srcy, data.dstx,
+ *                    data.dsty
+ * Reads   (callees): None.
+ * Writes   (direct): lm.srcx, lm.srcy, lm.dstx, lm.dsty
+ * Writes  (callees): None.
+ */
+
+inline void   RHO_HEST_REFC::compressRefinementInliers(void){
+    unsigned i, j;
+
+    for(i=0, j=0;i<arg.N;i++){
+        if(best.inl[i]){
+            lm.srcx[j] = data.srcx[i];
+            lm.srcy[j] = data.srcy[i];
+            lm.dstx[j] = data.dstx[i];
+            lm.dsty[j] = data.dsty[i];
+
+            j++;
         }
     }
 }
@@ -2173,9 +2463,10 @@ inline void   RHO_HEST_REFC::refine(void){
  */
 
 static inline void   sacCalcJacobianErrors(const float* H,
-                                           const float* src,
-                                           const float* dst,
-                                           const char*  inl,
+                                           const float* srcx,
+                                           const float* srcy,
+                                           const float* dstx,
+                                           const float* dsty,
                                            unsigned     N,
                                            float     (* JtJ)[8],
                                            float*       Jte,
@@ -2190,14 +2481,9 @@ static inline void   sacCalcJacobianErrors(const float* H,
 
     /* Additively compute JtJ and Jte */
     for(i=0;i<N;i++){
-        /* Skip outliers */
-        if(!inl[i]){
-            continue;
-        }
-
         /**
-         * Otherwise, compute additively the upper triangular matrix JtJ and
-         * the Jtd vector within the following formula:
+         * Compute additively the upper triangular matrix JtJ and the Jte
+         * vector within the following formula:
          *
          *     LaTeX:
          *     (J^{T}J + \lambda \diag( J^{T}J )) \beta = J^{T}[ y - f(\Beta) ]
@@ -2214,10 +2500,10 @@ static inline void   sacCalcJacobianErrors(const float* H,
          */
 
         /* Compute Squared Error */
-        float x       = src[2*i+0];
-        float y       = src[2*i+1];
-        float X       = dst[2*i+0];
-        float Y       = dst[2*i+1];
+        float x       = srcx[i];
+        float y       = srcy[i];
+        float X       = dstx[i];
+        float Y       = dsty[i];
         float W       = (H[6]*x + H[7]*y + 1.0f);
         float iW      = fabs(W) > FLT_EPSILON ? 1.0f/W : 0;
 
