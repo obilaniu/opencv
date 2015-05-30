@@ -1419,8 +1419,6 @@ inline void   RHO_HEST_REFC::rndSmpl(unsigned  sampleSize,
 
 inline int    RHO_HEST_REFC::isSampleDegenerate(void){
     unsigned i0 = ctrl.smpl[0], i1 = ctrl.smpl[1], i2 = ctrl.smpl[2], i3 = ctrl.smpl[3];
-    typedef struct{float x,y;} MyPt2f;
-    MyPt2f* pkdPts = (MyPt2f*)curr.pkdPts;
 
     /**
      * Pack the matches selected by the SAC algorithm.
@@ -1429,46 +1427,51 @@ inline int    RHO_HEST_REFC::isSampleDegenerate(void){
      * Gather 4 points into the vector
      */
 
-    pkdPts[0].x = data.srcx[i0];
-    pkdPts[0].y = data.srcy[i0];
-    pkdPts[1].x = data.srcx[i1];
-    pkdPts[1].y = data.srcy[i1];
-    pkdPts[2].x = data.srcx[i2];
-    pkdPts[2].y = data.srcy[i2];
-    pkdPts[3].x = data.srcx[i3];
-    pkdPts[3].y = data.srcy[i3];
-    pkdPts[4].x = data.dstx[i0];
-    pkdPts[4].y = data.dsty[i0];
-    pkdPts[5].x = data.dstx[i1];
-    pkdPts[5].y = data.dsty[i1];
-    pkdPts[6].x = data.dstx[i2];
-    pkdPts[6].y = data.dsty[i2];
-    pkdPts[7].x = data.dstx[i3];
-    pkdPts[7].y = data.dsty[i3];
+    float s0x = curr.pkdPts[ 0] = data.srcx[i0];
+    float s1x = curr.pkdPts[ 1] = data.srcx[i1];
+    float s2x = curr.pkdPts[ 2] = data.srcx[i2];
+    float s3x = curr.pkdPts[ 3] = data.srcx[i3];
+
+    float s0y = curr.pkdPts[ 4] = data.srcy[i0];
+    float s1y = curr.pkdPts[ 5] = data.srcy[i1];
+    float s2y = curr.pkdPts[ 6] = data.srcy[i2];
+    float s3y = curr.pkdPts[ 7] = data.srcy[i3];
+
+    float d0x = curr.pkdPts[ 8] = data.dstx[i0];
+    float d1x = curr.pkdPts[ 9] = data.dstx[i1];
+    float d2x = curr.pkdPts[10] = data.dstx[i2];
+    float d3x = curr.pkdPts[11] = data.dstx[i3];
+
+    float d0y = curr.pkdPts[12] = data.dsty[i0];
+    float d1y = curr.pkdPts[13] = data.dsty[i1];
+    float d2y = curr.pkdPts[14] = data.dsty[i2];
+    float d3y = curr.pkdPts[15] = data.dsty[i3];
 
     /**
      * If the matches' source points have common x and y coordinates, abort.
      */
 
-    if(pkdPts[0].x == pkdPts[1].x || pkdPts[1].x == pkdPts[2].x ||
-       pkdPts[2].x == pkdPts[3].x || pkdPts[0].x == pkdPts[2].x ||
-       pkdPts[1].x == pkdPts[3].x || pkdPts[0].x == pkdPts[3].x ||
-       pkdPts[0].y == pkdPts[1].y || pkdPts[1].y == pkdPts[2].y ||
-       pkdPts[2].y == pkdPts[3].y || pkdPts[0].y == pkdPts[2].y ||
-       pkdPts[1].y == pkdPts[3].y || pkdPts[0].y == pkdPts[3].y){
+    if(s0x == s1x || s1x == s2x ||
+       s2x == s3x || s0x == s2x ||
+       s1x == s3x || s0x == s3x ||
+       s0y == s1y || s1y == s2y ||
+       s2y == s3y || s0y == s2y ||
+       s1y == s3y || s0y == s3y){
         return 1;
     }
 
     /* If the matches do not satisfy the strong geometric constraint, abort. */
     /* (0 x 1) * 2 */
-    float cross0s0 = pkdPts[0].y-pkdPts[1].y;
-    float cross0s1 = pkdPts[1].x-pkdPts[0].x;
-    float cross0s2 = pkdPts[0].x*pkdPts[1].y-pkdPts[0].y*pkdPts[1].x;
-    float dots0    = cross0s0*pkdPts[2].x + cross0s1*pkdPts[2].y + cross0s2;
-    float cross0d0 = pkdPts[4].y-pkdPts[5].y;
-    float cross0d1 = pkdPts[5].x-pkdPts[4].x;
-    float cross0d2 = pkdPts[4].x*pkdPts[5].y-pkdPts[4].y*pkdPts[5].x;
-    float dotd0    = cross0d0*pkdPts[6].x + cross0d1*pkdPts[6].y + cross0d2;
+    float cross0s0 =   s0y   -   s1y;
+    float cross0s1 =   s1x   -   s0x;
+    float cross0s2 = s0x*s1y - s0y*s1x;
+    float dots0    = cross0s0*s2x + cross0s1*s2y + cross0s2;
+
+    float cross0d0 =   d0y   -   d1y;
+    float cross0d1 =   d1x   -   d0x;
+    float cross0d2 = d0x*d1y - d0y*d1x;
+    float dotd0    = cross0d0*d2x + cross0d1*d2y + cross0d2;
+
     if(((int)dots0^(int)dotd0) < 0){
         return 1;
     }
@@ -1476,23 +1479,27 @@ inline int    RHO_HEST_REFC::isSampleDegenerate(void){
     float cross1s0 = cross0s0;
     float cross1s1 = cross0s1;
     float cross1s2 = cross0s2;
-    float dots1    = cross1s0*pkdPts[3].x + cross1s1*pkdPts[3].y + cross1s2;
+    float dots1    = cross1s0*s3x + cross1s1*s3y + cross1s2;
+
     float cross1d0 = cross0d0;
     float cross1d1 = cross0d1;
     float cross1d2 = cross0d2;
-    float dotd1    = cross1d0*pkdPts[7].x + cross1d1*pkdPts[7].y + cross1d2;
+    float dotd1    = cross1d0*d3x + cross1d1*d3y + cross1d2;
+
     if(((int)dots1^(int)dotd1) < 0){
         return 1;
     }
     /* (2 x 3) * 0 */
-    float cross2s0 = pkdPts[2].y-pkdPts[3].y;
-    float cross2s1 = pkdPts[3].x-pkdPts[2].x;
-    float cross2s2 = pkdPts[2].x*pkdPts[3].y-pkdPts[2].y*pkdPts[3].x;
-    float dots2    = cross2s0*pkdPts[0].x + cross2s1*pkdPts[0].y + cross2s2;
-    float cross2d0 = pkdPts[6].y-pkdPts[7].y;
-    float cross2d1 = pkdPts[7].x-pkdPts[6].x;
-    float cross2d2 = pkdPts[6].x*pkdPts[7].y-pkdPts[6].y*pkdPts[7].x;
-    float dotd2    = cross2d0*pkdPts[4].x + cross2d1*pkdPts[4].y + cross2d2;
+    float cross2s0 =   s2y   -   s3y;
+    float cross2s1 =   s3x   -   s2x;
+    float cross2s2 = s2x*s3y - s2y*s3x;
+    float dots2    = cross2s0*s0x + cross2s1*s0y + cross2s2;
+
+    float cross2d0 =   d2y   -   d3y;
+    float cross2d1 =   d3x   -   d2x;
+    float cross2d2 = d2x*d3y - d2y*d3x;
+    float dotd2    = cross2d0*d0x + cross2d1*d0y + cross2d2;
+
     if(((int)dots2^(int)dotd2) < 0){
         return 1;
     }
@@ -1500,11 +1507,13 @@ inline int    RHO_HEST_REFC::isSampleDegenerate(void){
     float cross3s0 = cross2s0;
     float cross3s1 = cross2s1;
     float cross3s2 = cross2s2;
-    float dots3    = cross3s0*pkdPts[1].x + cross3s1*pkdPts[1].y + cross3s2;
+    float dots3    = cross3s0*s1x + cross3s1*s1y + cross3s2;
+
     float cross3d0 = cross2d0;
     float cross3d1 = cross2d1;
     float cross3d2 = cross2d2;
-    float dotd3    = cross3d0*pkdPts[5].x + cross3d1*pkdPts[5].y + cross3d2;
+    float dotd3    = cross3d0*d1x + cross3d1*d1y + cross3d2;
+
     if(((int)dots3^(int)dotd3) < 0){
         return 1;
     }
@@ -2078,24 +2087,27 @@ static inline unsigned sacCalcIterBound(double   confidence,
  *        or not).
  */
 
-static void hFuncRefC(float* packedPoints,/* Source (four x,y float coordinates) points followed by
-                                             destination (four x,y float coordinates) points, aligned by 32 bytes */
-                      float* H){          /* Homography (three 16-byte aligned rows of 3 floats) */
+static void hFuncRefC(float* packedPoints,/* 4 sets of floats, laid out thus: Source X 0123, Source Y 0123,
+                                             Destination X 0123,Destination Y 0123. Aligned on 32 bytes. */
+                      float* H){          /* Homography (three 32-byte aligned rows of 3 floats) */
     float x0=*packedPoints++;
-    float y0=*packedPoints++;
     float x1=*packedPoints++;
-    float y1=*packedPoints++;
     float x2=*packedPoints++;
-    float y2=*packedPoints++;
     float x3=*packedPoints++;
+
+    float y0=*packedPoints++;
+    float y1=*packedPoints++;
+    float y2=*packedPoints++;
     float y3=*packedPoints++;
+
     float X0=*packedPoints++;
-    float Y0=*packedPoints++;
     float X1=*packedPoints++;
-    float Y1=*packedPoints++;
     float X2=*packedPoints++;
-    float Y2=*packedPoints++;
     float X3=*packedPoints++;
+
+    float Y0=*packedPoints++;
+    float Y1=*packedPoints++;
+    float Y2=*packedPoints++;
     float Y3=*packedPoints++;
 
     float x0X0=x0*X0, x1X1=x1*X1, x2X2=x2*X2, x3X3=x3*X3;
@@ -2173,6 +2185,7 @@ static void hFuncRefC(float* packedPoints,/* Source (four x,y float coordinates)
                          {x2Y2-x1Y1,y2Y2-y1Y1,(Y1-Y2)},
                          {-x2Y2    ,-y2Y2    ,(Y2   )},
                          {x2Y2-x3Y3,y2Y2-y3Y3,(Y3-Y2)}};*/
+
     float minor[2][4] = {{x0-x2,x1-x2,x2   ,x3-x2},
                          {y0-y2,y1-y2,y2   ,y3-y2}};
     float major[3][8] = {{x2X2-x0X0,x2X2-x1X1,-x2X2    ,x2X2-x3X3,x2Y2-x0Y0,x2Y2-x1Y1,-x2Y2    ,x2Y2-x3Y3},
@@ -2187,27 +2200,27 @@ static void hFuncRefC(float* packedPoints,/* Source (four x,y float coordinates)
      * R(3)=(x0-x2)*R(3)-(x3-x2)*R(0),     y3'=(y3-y2)(x0-x2)-(x3-x2)(y0-y2)
      */
 
-    float scalar1=minor[0][0], scalar2=minor[0][1];
-    minor[1][1]=minor[1][1]*scalar1-minor[1][0]*scalar2;
+    float scalar1 = minor[0][0], scalar2 = minor[0][1];
+    minor[1][1]   = minor[1][1]*scalar1 - minor[1][0]*scalar2;
 
-    major[0][1]=major[0][1]*scalar1-major[0][0]*scalar2;
-    major[1][1]=major[1][1]*scalar1-major[1][0]*scalar2;
-    major[2][1]=major[2][1]*scalar1-major[2][0]*scalar2;
+    major[0][1]   = major[0][1]*scalar1 - major[0][0]*scalar2;
+    major[1][1]   = major[1][1]*scalar1 - major[1][0]*scalar2;
+    major[2][1]   = major[2][1]*scalar1 - major[2][0]*scalar2;
 
-    major[0][5]=major[0][5]*scalar1-major[0][4]*scalar2;
-    major[1][5]=major[1][5]*scalar1-major[1][4]*scalar2;
-    major[2][5]=major[2][5]*scalar1-major[2][4]*scalar2;
+    major[0][5]   = major[0][5]*scalar1 - major[0][4]*scalar2;
+    major[1][5]   = major[1][5]*scalar1 - major[1][4]*scalar2;
+    major[2][5]   = major[2][5]*scalar1 - major[2][4]*scalar2;
 
-    scalar2=minor[0][3];
-    minor[1][3]=minor[1][3]*scalar1-minor[1][0]*scalar2;
+    scalar2       = minor[0][3];
+    minor[1][3]   = minor[1][3]*scalar1 - minor[1][0]*scalar2;
 
-    major[0][3]=major[0][3]*scalar1-major[0][0]*scalar2;
-    major[1][3]=major[1][3]*scalar1-major[1][0]*scalar2;
-    major[2][3]=major[2][3]*scalar1-major[2][0]*scalar2;
+    major[0][3]   = major[0][3]*scalar1 - major[0][0]*scalar2;
+    major[1][3]   = major[1][3]*scalar1 - major[1][0]*scalar2;
+    major[2][3]   = major[2][3]*scalar1 - major[2][0]*scalar2;
 
-    major[0][7]=major[0][7]*scalar1-major[0][4]*scalar2;
-    major[1][7]=major[1][7]*scalar1-major[1][4]*scalar2;
-    major[2][7]=major[2][7]*scalar1-major[2][4]*scalar2;
+    major[0][7]   = major[0][7]*scalar1 - major[0][4]*scalar2;
+    major[1][7]   = major[1][7]*scalar1 - major[1][4]*scalar2;
+    major[2][7]   = major[2][7]*scalar1 - major[2][4]*scalar2;
 
     /**
      * Eliminate column 1 of rows 0 and 3
@@ -2215,25 +2228,25 @@ static void hFuncRefC(float* packedPoints,/* Source (four x,y float coordinates)
      * R(0)=y1'*R(0)-(y0-y2)*R(1)
      */
 
-    scalar1=minor[1][1];scalar2=minor[1][3];
-    major[0][3]=major[0][3]*scalar1-major[0][1]*scalar2;
-    major[1][3]=major[1][3]*scalar1-major[1][1]*scalar2;
-    major[2][3]=major[2][3]*scalar1-major[2][1]*scalar2;
+    scalar1       = minor[1][1]; scalar2 = minor[1][3];
+    major[0][3]   = major[0][3]*scalar1 - major[0][1]*scalar2;
+    major[1][3]   = major[1][3]*scalar1 - major[1][1]*scalar2;
+    major[2][3]   = major[2][3]*scalar1 - major[2][1]*scalar2;
 
-    major[0][7]=major[0][7]*scalar1-major[0][5]*scalar2;
-    major[1][7]=major[1][7]*scalar1-major[1][5]*scalar2;
-    major[2][7]=major[2][7]*scalar1-major[2][5]*scalar2;
+    major[0][7]   = major[0][7]*scalar1 - major[0][5]*scalar2;
+    major[1][7]   = major[1][7]*scalar1 - major[1][5]*scalar2;
+    major[2][7]   = major[2][7]*scalar1 - major[2][5]*scalar2;
 
-    scalar2=minor[1][0];
-    minor[0][0]=minor[0][0]*scalar1-minor[0][1]*scalar2;
+    scalar2       = minor[1][0];
+    minor[0][0]   = minor[0][0]*scalar1 - minor[0][1]*scalar2;
 
-    major[0][0]=major[0][0]*scalar1-major[0][1]*scalar2;
-    major[1][0]=major[1][0]*scalar1-major[1][1]*scalar2;
-    major[2][0]=major[2][0]*scalar1-major[2][1]*scalar2;
+    major[0][0]   = major[0][0]*scalar1 - major[0][1]*scalar2;
+    major[1][0]   = major[1][0]*scalar1 - major[1][1]*scalar2;
+    major[2][0]   = major[2][0]*scalar1 - major[2][1]*scalar2;
 
-    major[0][4]=major[0][4]*scalar1-major[0][5]*scalar2;
-    major[1][4]=major[1][4]*scalar1-major[1][5]*scalar2;
-    major[2][4]=major[2][4]*scalar1-major[2][5]*scalar2;
+    major[0][4]   = major[0][4]*scalar1 - major[0][5]*scalar2;
+    major[1][4]   = major[1][4]*scalar1 - major[1][5]*scalar2;
+    major[2][4]   = major[2][4]*scalar1 - major[2][5]*scalar2;
 
     /**
      * Eliminate columns 0 and 1 of row 2
@@ -2242,71 +2255,85 @@ static void hFuncRefC(float* packedPoints,/* Source (four x,y float coordinates)
      * R(2)-= (x2*R(0) + y2*R(1))
      */
 
-    scalar1=1.0f/minor[0][0];
-    major[0][0]*=scalar1;
-    major[1][0]*=scalar1;
-    major[2][0]*=scalar1;
-    major[0][4]*=scalar1;
-    major[1][4]*=scalar1;
-    major[2][4]*=scalar1;
+    scalar1       = 1.0f/minor[0][0];
+    major[0][0]  *= scalar1;
+    major[1][0]  *= scalar1;
+    major[2][0]  *= scalar1;
+    major[0][4]  *= scalar1;
+    major[1][4]  *= scalar1;
+    major[2][4]  *= scalar1;
 
-    scalar1=1.0f/minor[1][1];
-    major[0][1]*=scalar1;
-    major[1][1]*=scalar1;
-    major[2][1]*=scalar1;
-    major[0][5]*=scalar1;
-    major[1][5]*=scalar1;
-    major[2][5]*=scalar1;
+    scalar1       = 1.0f/minor[1][1];
+    major[0][1]  *= scalar1;
+    major[1][1]  *= scalar1;
+    major[2][1]  *= scalar1;
+    major[0][5]  *= scalar1;
+    major[1][5]  *= scalar1;
+    major[2][5]  *= scalar1;
 
 
-    scalar1=minor[0][2];scalar2=minor[1][2];
-    major[0][2]-=major[0][0]*scalar1+major[0][1]*scalar2;
-    major[1][2]-=major[1][0]*scalar1+major[1][1]*scalar2;
-    major[2][2]-=major[2][0]*scalar1+major[2][1]*scalar2;
+    scalar1       = minor[0][2]; scalar2 = minor[1][2];
+    major[0][2]  -= major[0][0]*scalar1 + major[0][1]*scalar2;
+    major[1][2]  -= major[1][0]*scalar1 + major[1][1]*scalar2;
+    major[2][2]  -= major[2][0]*scalar1 + major[2][1]*scalar2;
 
-    major[0][6]-=major[0][4]*scalar1+major[0][5]*scalar2;
-    major[1][6]-=major[1][4]*scalar1+major[1][5]*scalar2;
-    major[2][6]-=major[2][4]*scalar1+major[2][5]*scalar2;
+    major[0][6]  -= major[0][4]*scalar1 + major[0][5]*scalar2;
+    major[1][6]  -= major[1][4]*scalar1 + major[1][5]*scalar2;
+    major[2][6]  -= major[2][4]*scalar1 + major[2][5]*scalar2;
 
     /* Only major matters now. R(3) and R(7) correspond to the hollowed-out rows. */
-    scalar1=major[0][7];
-    major[1][7]/=scalar1;
-    major[2][7]/=scalar1;
+    scalar1       = major[0][7];
+    major[1][7]  /= scalar1;
+    major[2][7]  /= scalar1;
 
-    scalar1=major[0][0];major[1][0]-=scalar1*major[1][7];major[2][0]-=scalar1*major[2][7];
-    scalar1=major[0][1];major[1][1]-=scalar1*major[1][7];major[2][1]-=scalar1*major[2][7];
-    scalar1=major[0][2];major[1][2]-=scalar1*major[1][7];major[2][2]-=scalar1*major[2][7];
-    scalar1=major[0][3];major[1][3]-=scalar1*major[1][7];major[2][3]-=scalar1*major[2][7];
-    scalar1=major[0][4];major[1][4]-=scalar1*major[1][7];major[2][4]-=scalar1*major[2][7];
-    scalar1=major[0][5];major[1][5]-=scalar1*major[1][7];major[2][5]-=scalar1*major[2][7];
-    scalar1=major[0][6];major[1][6]-=scalar1*major[1][7];major[2][6]-=scalar1*major[2][7];
+    scalar1       = major[0][0];
+    major[1][0]  -= scalar1*major[1][7];
+    major[2][0]  -= scalar1*major[2][7];
+    scalar1       = major[0][1];
+    major[1][1]  -= scalar1*major[1][7];
+    major[2][1]  -= scalar1*major[2][7];
+    scalar1       = major[0][2];
+    major[1][2]  -= scalar1*major[1][7];
+    major[2][2]  -= scalar1*major[2][7];
+    scalar1       = major[0][3];
+    major[1][3]  -= scalar1*major[1][7];
+    major[2][3]  -= scalar1*major[2][7];
+    scalar1       = major[0][4];
+    major[1][4]  -= scalar1*major[1][7];
+    major[2][4]  -= scalar1*major[2][7];
+    scalar1       = major[0][5];
+    major[1][5]  -= scalar1*major[1][7];
+    major[2][5]  -= scalar1*major[2][7];
+    scalar1       = major[0][6];
+    major[1][6]  -= scalar1*major[1][7];
+    major[2][6]  -= scalar1*major[2][7];
 
 
     /* One column left (Two in fact, but the last one is the homography) */
-    scalar1=major[1][3];
+    scalar1      = major[1][3];
 
-    major[2][3]/=scalar1;
-    scalar1=major[1][0];major[2][0]-=scalar1*major[2][3];
-    scalar1=major[1][1];major[2][1]-=scalar1*major[2][3];
-    scalar1=major[1][2];major[2][2]-=scalar1*major[2][3];
-    scalar1=major[1][4];major[2][4]-=scalar1*major[2][3];
-    scalar1=major[1][5];major[2][5]-=scalar1*major[2][3];
-    scalar1=major[1][6];major[2][6]-=scalar1*major[2][3];
-    scalar1=major[1][7];major[2][7]-=scalar1*major[2][3];
+    major[2][3] /= scalar1;
+    scalar1      = major[1][0]; major[2][0] -= scalar1*major[2][3];
+    scalar1      = major[1][1]; major[2][1] -= scalar1*major[2][3];
+    scalar1      = major[1][2]; major[2][2] -= scalar1*major[2][3];
+    scalar1      = major[1][4]; major[2][4] -= scalar1*major[2][3];
+    scalar1      = major[1][5]; major[2][5] -= scalar1*major[2][3];
+    scalar1      = major[1][6]; major[2][6] -= scalar1*major[2][3];
+    scalar1      = major[1][7]; major[2][7] -= scalar1*major[2][3];
 
 
     /* Homography is done. */
-    H[0]=major[2][0];
-    H[1]=major[2][1];
-    H[2]=major[2][2];
+    H[0] = major[2][0];
+    H[1] = major[2][1];
+    H[2] = major[2][2];
 
-    H[3]=major[2][4];
-    H[4]=major[2][5];
-    H[5]=major[2][6];
+    H[3] = major[2][4];
+    H[4] = major[2][5];
+    H[5] = major[2][6];
 
-    H[6]=major[2][7];
-    H[7]=major[2][3];
-    H[8]=1.0;
+    H[6] = major[2][7];
+    H[7] = major[2][3];
+    H[8] = 1.0;
 }
 
 
